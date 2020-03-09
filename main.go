@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	uuid2 "github.com/google/uuid"
+	"io"
 	"log"
 	"os"
 	"strings"
@@ -11,6 +12,7 @@ import (
 
 const icsDateLayout = "20060102T150405Z"
 const triggerDuration = "-P0DT12H0M0S" // 12 hours before
+const outputFilename = "enhanced.ics"  // 12 hours before
 
 func main() {
 	filename := getFilenameFromArgs()
@@ -22,12 +24,13 @@ func processFile(filename string) {
 	log.Println("processing ICS file")
 
 	readFile, err := os.Open(filename)
-
 	if err != nil {
 		log.Fatalf("failed to open file: %s", err)
 	}
 
-	var fileTextLines []string
+	defer readFile.Close()
+
+	var icsTextLines []string
 	var summary string
 	var lastEventDate time.Time
 
@@ -46,35 +49,53 @@ func processFile(filename string) {
 		}
 
 		if strings.EqualFold(line, "END:VEVENT") {
-			fileTextLines = appendTrigger(fileTextLines, summary)
+			icsTextLines = appendTrigger(icsTextLines, summary)
 		}
 
 		if strings.EqualFold(line, "END:VCALENDAR") {
-			fileTextLines = appendDownloadNewCalendarDatesEvent(fileTextLines, lastEventDate)
+			icsTextLines = appendDownloadNewCalendarDatesEvent(icsTextLines, lastEventDate)
 		}
 
-		fileTextLines = append(fileTextLines, line)
+		icsTextLines = append(icsTextLines, line)
 	}
 
-	_ = readFile.Close()
-
-	for _, eachline := range fileTextLines {
-		log.Println(eachline)
+	err = writeOutputFile(icsTextLines)
+	if err != nil {
+		log.Fatal("failed to create enhanced file", err)
 	}
 
 	log.Println("finished")
 }
 
-func appendTrigger(fileTextLines []string, triggerText string) []string {
-	fileTextLines = append(fileTextLines, "BEGIN:VALARM")
-	fileTextLines = append(fileTextLines, "ACTION:DISPLAY")
-	fileTextLines = append(fileTextLines, "DESCRIPTION:"+triggerText)
-	fileTextLines = append(fileTextLines, "TRIGGER:"+triggerDuration)
-	fileTextLines = append(fileTextLines, "END:VALARM")
-	return fileTextLines
+func writeOutputFile(icsTextLines []string) error {
+	file, err := os.Create(outputFilename)
+	if err != nil {
+		log.Fatal("failed to create file", err)
+	}
+
+	defer file.Close()
+
+	joinedString := strings.Join(icsTextLines, "\n")
+
+	_, err = io.WriteString(file, joinedString)
+	if err != nil {
+		log.Fatal("failed to write file content", err)
+	}
+
+	return file.Sync()
 }
 
-func appendDownloadNewCalendarDatesEvent(fileTextLines []string, eventDate time.Time) []string {
+func appendTrigger(icsTextLines []string, triggerText string) []string {
+	icsTextLines = append(icsTextLines, "BEGIN:VALARM")
+	icsTextLines = append(icsTextLines, "ACTION:DISPLAY")
+	icsTextLines = append(icsTextLines, "DESCRIPTION:"+triggerText)
+	icsTextLines = append(icsTextLines, "TRIGGER:"+triggerDuration)
+	icsTextLines = append(icsTextLines, "END:VALARM")
+
+	return icsTextLines
+}
+
+func appendDownloadNewCalendarDatesEvent(icsTextLines []string, eventDate time.Time) []string {
 	log.Println("adding reminder for downloading new calendar file")
 
 	uuid := uuid2.New().String()
@@ -87,38 +108,40 @@ func appendDownloadNewCalendarDatesEvent(fileTextLines []string, eventDate time.
 
 	timestamp := time.Now().Format(icsDateLayout)
 
-	fileTextLines = append(fileTextLines, "BEGIN:VEVENT")
-	fileTextLines = append(fileTextLines, "UID:"+uuid)
-	fileTextLines = append(fileTextLines, "DTSTART:"+startDateString)
-	fileTextLines = append(fileTextLines, "SEQUENCE:0")
-	fileTextLines = append(fileTextLines, "TRANSP:OPAQUE")
-	fileTextLines = append(fileTextLines, "DTEND:"+endDateString)
-	fileTextLines = append(fileTextLines, "SUMMARY:Neuen Abfallkalender herunterladen")
-	fileTextLines = append(fileTextLines, "CLASS:PUBLIC")
-	fileTextLines = append(fileTextLines, "DTSTAMP:"+timestamp)
-	fileTextLines = append(fileTextLines, "BEGIN:VALARM")
-	fileTextLines = append(fileTextLines, "ACTION:DISPLAY")
-	fileTextLines = append(fileTextLines, "DESCRIPTION:Neuen Abfallkalender herunterladen")
-	fileTextLines = append(fileTextLines, "TRIGGER:-P0DT0H0M1S")
-	fileTextLines = append(fileTextLines, "END:VALARM")
-	fileTextLines = append(fileTextLines, "END:VEVENT")
-	return fileTextLines
+	icsTextLines = append(icsTextLines, "BEGIN:VEVENT")
+	icsTextLines = append(icsTextLines, "UID:"+uuid)
+	icsTextLines = append(icsTextLines, "DTSTART:"+startDateString)
+	icsTextLines = append(icsTextLines, "SEQUENCE:0")
+	icsTextLines = append(icsTextLines, "TRANSP:OPAQUE")
+	icsTextLines = append(icsTextLines, "DTEND:"+endDateString)
+	icsTextLines = append(icsTextLines, "SUMMARY:Neuen Abfallkalender herunterladen")
+	icsTextLines = append(icsTextLines, "CLASS:PUBLIC")
+	icsTextLines = append(icsTextLines, "DTSTAMP:"+timestamp)
+	icsTextLines = append(icsTextLines, "BEGIN:VALARM")
+	icsTextLines = append(icsTextLines, "ACTION:DISPLAY")
+	icsTextLines = append(icsTextLines, "DESCRIPTION:Neuen Abfallkalender herunterladen")
+	icsTextLines = append(icsTextLines, "TRIGGER:-P0DT0H0M1S")
+	icsTextLines = append(icsTextLines, "END:VALARM")
+	icsTextLines = append(icsTextLines, "END:VEVENT")
+
+	return icsTextLines
 }
 
 func parseEventDate(line string) time.Time {
 	lineTokens := strings.Split(line, ":")
 	dateString := lineTokens[1]
+
 	return parseDate(dateString)
 }
 
 func parseSummary(line string) string {
 	lineTokens := strings.Split(line, ":")
+
 	return lineTokens[1]
 }
 
 func parseDate(dateString string) time.Time {
 	date, err := time.Parse(icsDateLayout, dateString)
-
 	if err != nil {
 		log.Fatalf("failed to parse date: %s", err)
 	}
@@ -134,5 +157,6 @@ func getFilenameFromArgs() string {
 	}
 
 	filename := argsWithoutProg[0]
+
 	return filename
 }
