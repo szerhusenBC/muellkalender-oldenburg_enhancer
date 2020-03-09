@@ -12,17 +12,23 @@ import (
 
 const icsDateLayout = "20060102T150405Z"
 const triggerDuration = "-P0DT12H0M0S" // 12 hours before
-const outputFilename = "enhanced.ics"  // 12 hours before
+const outputFilename = "enhanced.ics"
 
 func main() {
 	filename := getFilenameFromArgs()
 
-	processFile(filename)
-}
-
-func processFile(filename string) {
 	log.Println("processing ICS file")
 
+	icsFileLines, eventCount := parseEvents(filename)
+
+	log.Printf("processed %v events", eventCount)
+
+	writeOutputFile(icsFileLines)
+
+	log.Printf("finished, written %v events to enhanced ICS file", eventCount+1)
+}
+
+func parseEvents(filename string) ([]string, int) {
 	readFile, err := os.Open(filename)
 	if err != nil {
 		log.Fatalf("failed to open file: %s", err)
@@ -30,7 +36,7 @@ func processFile(filename string) {
 
 	defer readFile.Close()
 
-	var icsTextLines []string
+	var icsFileLines []string
 	var summary string
 	var lastEventDate time.Time
 	var eventCount int
@@ -41,42 +47,24 @@ func processFile(filename string) {
 	for fileScanner.Scan() {
 		line := fileScanner.Text()
 
-		if strings.HasPrefix(line, "SUMMARY") {
+		if isSummaryLine(line) {
 			summary = parseSummary(line)
-		}
-
-		if strings.HasPrefix(line, "BEGIN:VEVENT") {
+		} else if isEventStartLine(line) {
 			eventCount += 1
-		}
-
-		if strings.HasPrefix(line, "DTSTART") {
+		} else if isStartDateLine(line) {
 			lastEventDate = parseEventDate(line)
+		} else if isEventEndLine(line) {
+			icsFileLines = appendTrigger(icsFileLines, summary)
+		} else if isCalendarEndLine(line) {
+			icsFileLines = appendDownloadNewCalendarFileEvent(icsFileLines, lastEventDate)
 		}
 
-		if strings.EqualFold(line, "END:VEVENT") {
-			icsTextLines = appendTrigger(icsTextLines, summary)
-		}
-
-		if strings.EqualFold(line, "END:VCALENDAR") {
-			icsTextLines = appendDownloadNewCalendarDatesEvent(icsTextLines, lastEventDate)
-		}
-
-		icsTextLines = append(icsTextLines, line)
+		icsFileLines = append(icsFileLines, line)
 	}
-
-	log.Printf("processed %v events", eventCount)
-
-	err = writeOutputFile(icsTextLines)
-	if err != nil {
-		log.Fatalf("failed to create enhanced file: %s", err)
-	}
-
-	log.Printf("written %v events to enhanced file", eventCount+1)
-
-	log.Println("finished")
+	return icsFileLines, eventCount
 }
 
-func writeOutputFile(icsTextLines []string) error {
+func writeOutputFile(icsFileLines []string) {
 	file, err := os.Create(outputFilename)
 	if err != nil {
 		log.Fatalf("failed to create file: %s", err)
@@ -84,27 +72,30 @@ func writeOutputFile(icsTextLines []string) error {
 
 	defer file.Close()
 
-	joinedString := strings.Join(icsTextLines, "\n")
+	joinedString := strings.Join(icsFileLines, "\n")
 
 	_, err = io.WriteString(file, joinedString)
 	if err != nil {
 		log.Fatalf("failed to write file content: %s", err)
 	}
 
-	return file.Sync()
+	err = file.Sync()
+	if err != nil {
+		log.Fatalf("failed to write enhanced file: %s", err)
+	}
 }
 
-func appendTrigger(icsTextLines []string, triggerText string) []string {
-	icsTextLines = append(icsTextLines, "BEGIN:VALARM")
-	icsTextLines = append(icsTextLines, "ACTION:DISPLAY")
-	icsTextLines = append(icsTextLines, "DESCRIPTION:"+triggerText)
-	icsTextLines = append(icsTextLines, "TRIGGER:"+triggerDuration)
-	icsTextLines = append(icsTextLines, "END:VALARM")
+func appendTrigger(icsFileLines []string, triggerText string) []string {
+	icsFileLines = append(icsFileLines, "BEGIN:VALARM")
+	icsFileLines = append(icsFileLines, "ACTION:DISPLAY")
+	icsFileLines = append(icsFileLines, "DESCRIPTION:"+triggerText)
+	icsFileLines = append(icsFileLines, "TRIGGER:"+triggerDuration)
+	icsFileLines = append(icsFileLines, "END:VALARM")
 
-	return icsTextLines
+	return icsFileLines
 }
 
-func appendDownloadNewCalendarDatesEvent(icsTextLines []string, eventDate time.Time) []string {
+func appendDownloadNewCalendarFileEvent(icsFileLines []string, eventDate time.Time) []string {
 	log.Println("adding reminder for downloading new calendar file")
 
 	uuid := uuid2.New().String()
@@ -117,23 +108,23 @@ func appendDownloadNewCalendarDatesEvent(icsTextLines []string, eventDate time.T
 
 	timestamp := time.Now().Format(icsDateLayout)
 
-	icsTextLines = append(icsTextLines, "BEGIN:VEVENT")
-	icsTextLines = append(icsTextLines, "UID:"+uuid)
-	icsTextLines = append(icsTextLines, "DTSTART:"+startDateString)
-	icsTextLines = append(icsTextLines, "SEQUENCE:0")
-	icsTextLines = append(icsTextLines, "TRANSP:OPAQUE")
-	icsTextLines = append(icsTextLines, "DTEND:"+endDateString)
-	icsTextLines = append(icsTextLines, "SUMMARY:Neuen Abfallkalender herunterladen")
-	icsTextLines = append(icsTextLines, "CLASS:PUBLIC")
-	icsTextLines = append(icsTextLines, "DTSTAMP:"+timestamp)
-	icsTextLines = append(icsTextLines, "BEGIN:VALARM")
-	icsTextLines = append(icsTextLines, "ACTION:DISPLAY")
-	icsTextLines = append(icsTextLines, "DESCRIPTION:Neuen Abfallkalender herunterladen")
-	icsTextLines = append(icsTextLines, "TRIGGER:-P0DT0H0M1S")
-	icsTextLines = append(icsTextLines, "END:VALARM")
-	icsTextLines = append(icsTextLines, "END:VEVENT")
+	icsFileLines = append(icsFileLines, "BEGIN:VEVENT")
+	icsFileLines = append(icsFileLines, "UID:"+uuid)
+	icsFileLines = append(icsFileLines, "DTSTART:"+startDateString)
+	icsFileLines = append(icsFileLines, "SEQUENCE:0")
+	icsFileLines = append(icsFileLines, "TRANSP:OPAQUE")
+	icsFileLines = append(icsFileLines, "DTEND:"+endDateString)
+	icsFileLines = append(icsFileLines, "SUMMARY:Neuen Abfallkalender herunterladen")
+	icsFileLines = append(icsFileLines, "CLASS:PUBLIC")
+	icsFileLines = append(icsFileLines, "DTSTAMP:"+timestamp)
+	icsFileLines = append(icsFileLines, "BEGIN:VALARM")
+	icsFileLines = append(icsFileLines, "ACTION:DISPLAY")
+	icsFileLines = append(icsFileLines, "DESCRIPTION:Neuen Abfallkalender herunterladen")
+	icsFileLines = append(icsFileLines, "TRIGGER:-P0DT0H0M1S")
+	icsFileLines = append(icsFileLines, "END:VALARM")
+	icsFileLines = append(icsFileLines, "END:VEVENT")
 
-	return icsTextLines
+	return icsFileLines
 }
 
 func parseEventDate(line string) time.Time {
@@ -168,4 +159,24 @@ func getFilenameFromArgs() string {
 	filename := argsWithoutProg[0]
 
 	return filename
+}
+
+func isCalendarEndLine(line string) bool {
+	return strings.EqualFold(line, "END:VCALENDAR")
+}
+
+func isEventEndLine(line string) bool {
+	return strings.EqualFold(line, "END:VEVENT")
+}
+
+func isStartDateLine(line string) bool {
+	return strings.HasPrefix(line, "DTSTART")
+}
+
+func isEventStartLine(line string) bool {
+	return strings.HasPrefix(line, "BEGIN:VEVENT")
+}
+
+func isSummaryLine(line string) bool {
+	return strings.HasPrefix(line, "SUMMARY")
 }
