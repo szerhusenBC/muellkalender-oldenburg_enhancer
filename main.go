@@ -33,6 +33,7 @@ func processFile(filename string) {
 	var icsTextLines []string
 	var summary string
 	var lastEventDate time.Time
+	var eventCount int
 
 	fileScanner := bufio.NewScanner(readFile)
 	fileScanner.Split(bufio.ScanLines)
@@ -42,6 +43,10 @@ func processFile(filename string) {
 
 		if strings.HasPrefix(line, "SUMMARY") {
 			summary = parseSummary(line)
+		}
+
+		if strings.HasPrefix(line, "BEGIN:VEVENT") {
+			eventCount += 1
 		}
 
 		if strings.HasPrefix(line, "DTSTART") {
@@ -59,10 +64,14 @@ func processFile(filename string) {
 		icsTextLines = append(icsTextLines, line)
 	}
 
+	log.Printf("processed %v events", eventCount)
+
 	err = writeOutputFile(icsTextLines)
 	if err != nil {
 		log.Fatalf("failed to create enhanced file: %s", err)
 	}
+
+	log.Printf("written %v events to enhanced file", eventCount+1)
 
 	log.Println("finished")
 }
