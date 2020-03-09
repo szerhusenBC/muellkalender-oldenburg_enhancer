@@ -106,10 +106,10 @@ func appendDownloadNewCalendarFileEvent(icsFileLines []string, eventDate time.Ti
 
 	timestamp := time.Now().Format(icsDateLayout)
 
-	uuid := strconv.FormatInt(startDate.Unix(), 10)
+	uid := strconv.FormatInt(startDate.Unix(), 10)
 
 	icsFileLines = append(icsFileLines, "BEGIN:VEVENT")
-	icsFileLines = append(icsFileLines, "UID:"+uuid)
+	icsFileLines = append(icsFileLines, "UID:"+uid)
 	icsFileLines = append(icsFileLines, "DTSTART:"+startDateString)
 	icsFileLines = append(icsFileLines, "SEQUENCE:0")
 	icsFileLines = append(icsFileLines, "TRANSP:OPAQUE")
