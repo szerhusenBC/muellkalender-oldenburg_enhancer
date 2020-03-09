@@ -2,10 +2,10 @@ package main
 
 import (
 	"bufio"
-	uuid2 "github.com/google/uuid"
 	"io"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -98,8 +98,6 @@ func appendTrigger(icsFileLines []string, triggerText string) []string {
 func appendDownloadNewCalendarFileEvent(icsFileLines []string, eventDate time.Time) []string {
 	log.Println("adding reminder for downloading new calendar file")
 
-	uuid := uuid2.New().String()
-
 	startDate := eventDate.Add(time.Hour * -(12 + 24))
 	endDate := startDate.Add(time.Hour)
 
@@ -107,6 +105,8 @@ func appendDownloadNewCalendarFileEvent(icsFileLines []string, eventDate time.Ti
 	endDateString := endDate.Format(icsDateLayout)
 
 	timestamp := time.Now().Format(icsDateLayout)
+
+	uuid := strconv.FormatInt(startDate.Unix(), 10)
 
 	icsFileLines = append(icsFileLines, "BEGIN:VEVENT")
 	icsFileLines = append(icsFileLines, "UID:"+uuid)
