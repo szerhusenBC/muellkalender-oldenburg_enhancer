@@ -61,7 +61,7 @@ func processFile(filename string) {
 
 	err = writeOutputFile(icsTextLines)
 	if err != nil {
-		log.Fatal("failed to create enhanced file", err)
+		log.Fatalf("failed to create enhanced file: %s", err)
 	}
 
 	log.Println("finished")
@@ -70,7 +70,7 @@ func processFile(filename string) {
 func writeOutputFile(icsTextLines []string) error {
 	file, err := os.Create(outputFilename)
 	if err != nil {
-		log.Fatal("failed to create file", err)
+		log.Fatalf("failed to create file: %s", err)
 	}
 
 	defer file.Close()
@@ -79,7 +79,7 @@ func writeOutputFile(icsTextLines []string) error {
 
 	_, err = io.WriteString(file, joinedString)
 	if err != nil {
-		log.Fatal("failed to write file content", err)
+		log.Fatalf("failed to write file content: %s", err)
 	}
 
 	return file.Sync()
@@ -153,7 +153,7 @@ func getFilenameFromArgs() string {
 	argsWithoutProg := os.Args[1:]
 
 	if len(argsWithoutProg) < 1 {
-		log.Fatalf("filename is missing")
+		log.Fatal("filename is missing")
 	}
 
 	filename := argsWithoutProg[0]
