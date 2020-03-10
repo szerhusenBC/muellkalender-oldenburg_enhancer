@@ -11,7 +11,7 @@ import (
 )
 
 const icsDateLayout = "20060102T150405Z"
-const triggerDuration = "-P0DT12H0M0S" // 12 hours before
+const triggerExpression = "-P0DT6H0M0S" // 1 day before at 6 pm (Google format)
 const outputFilename = "enhanced.ics"
 
 func main() {
@@ -37,7 +37,6 @@ func parseEvents(filename string) ([]string, int) {
 	defer readFile.Close()
 
 	var icsFileLines []string
-	var summary string
 	var lastEventDate time.Time
 	var eventCount int
 
@@ -47,14 +46,12 @@ func parseEvents(filename string) ([]string, int) {
 	for fileScanner.Scan() {
 		line := fileScanner.Text()
 
-		if isSummaryLine(line) {
-			summary = parseSummary(line)
-		} else if isEventStartLine(line) {
+		if isEventStartLine(line) {
 			eventCount += 1
 		} else if isStartDateLine(line) {
 			lastEventDate = parseEventDate(line)
 		} else if isEventEndLine(line) {
-			icsFileLines = appendTrigger(icsFileLines, summary)
+			icsFileLines = appendTrigger(icsFileLines)
 		} else if isCalendarEndLine(line) {
 			icsFileLines = appendDownloadNewCalendarFileEvent(icsFileLines, lastEventDate)
 		}
@@ -85,11 +82,11 @@ func writeOutputFile(icsFileLines []string) {
 	}
 }
 
-func appendTrigger(icsFileLines []string, triggerText string) []string {
+func appendTrigger(icsFileLines []string) []string {
 	icsFileLines = append(icsFileLines, "BEGIN:VALARM")
 	icsFileLines = append(icsFileLines, "ACTION:DISPLAY")
-	icsFileLines = append(icsFileLines, "DESCRIPTION:"+triggerText)
-	icsFileLines = append(icsFileLines, "TRIGGER:"+triggerDuration)
+	icsFileLines = append(icsFileLines, "DESCRIPTION:This is an event reminder")
+	icsFileLines = append(icsFileLines, "TRIGGER:"+triggerExpression)
 	icsFileLines = append(icsFileLines, "END:VALARM")
 
 	return icsFileLines
@@ -119,8 +116,8 @@ func appendDownloadNewCalendarFileEvent(icsFileLines []string, eventDate time.Ti
 	icsFileLines = append(icsFileLines, "DTSTAMP:"+timestamp)
 	icsFileLines = append(icsFileLines, "BEGIN:VALARM")
 	icsFileLines = append(icsFileLines, "ACTION:DISPLAY")
-	icsFileLines = append(icsFileLines, "DESCRIPTION:Neuen Abfallkalender herunterladen")
-	icsFileLines = append(icsFileLines, "TRIGGER:-P0DT0H0M1S")
+	icsFileLines = append(icsFileLines, "DESCRIPTION:This is an event reminder")
+	icsFileLines = append(icsFileLines, "TRIGGER:"+triggerExpression)
 	icsFileLines = append(icsFileLines, "END:VALARM")
 	icsFileLines = append(icsFileLines, "END:VEVENT")
 
@@ -175,8 +172,4 @@ func isStartDateLine(line string) bool {
 
 func isEventStartLine(line string) bool {
 	return strings.HasPrefix(line, "BEGIN:VEVENT")
-}
-
-func isSummaryLine(line string) bool {
-	return strings.HasPrefix(line, "SUMMARY")
 }
