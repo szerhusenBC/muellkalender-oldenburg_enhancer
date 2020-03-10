@@ -25,6 +25,3 @@ build-windows:
 clean:
 	go clean
 	rm -rf $(BUILD_DIRECTORY)
-
-deps:
-	go get
